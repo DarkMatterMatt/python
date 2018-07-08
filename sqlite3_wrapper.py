@@ -15,15 +15,27 @@
 ##                                                                          ##
 ##    Changelog: B=Bug, A=Add, R=Remove, C=Change                           ##
 ##    2.0.5 - C: Remove duplicates requested in a "get_list"                ##
+##    2.1.0 - A: Foreign Key support                                        ##
 ##                                                                          ##
-##        Usage: See test() function at the bottom for examples             ##
+##        Usage:                                                            ##
+##             > import sqlite3_wrapper                                     ##
+##             > db = sqlite3_wrapper.Database("name.db", map_of_tables)    ##
+##             > db.put(table, selection_dictionary, dictionary_to_put)     ##
+##                  returns the rowid updated                               ##
+##             > db.post - same as put, but forces new record               ##
+##             > db.get_all(table, selection_dict, optional_list_to_get)    ##
+##                  returns a dictionary containing every (requested) value ##
+##             > db.get - same as get_all, but returns the first match only ##
+##             > db.delete(table, selection_dict)                           ##
+##             > db.create|delete|reset_table(table_name)                   ##
+##             > db.commit|close(table_name)                                ##
 ##                                                                          ##
 ##############################################################################
 
 import sqlite3
 import re
 
-__version__ = "2.0.5"
+__version__ = "2.1.0"
 _DEBUG = False
 
 EQUAL               = "="
@@ -51,13 +63,21 @@ class Database:
         """Open database object, initialise tables map."""
         self.conn = sqlite3.connect(fname, detect_types=sqlite3.PARSE_DECLTYPES)
         self.c = self.conn.cursor()
-        self.safeNamePattern = re.compile(r"[A-Za-z_]\w*$")
+        self.safeNamePattern = re.compile(r"[a-z_]\w*$", re.IGNORECASE)
         self.tables = tables_map
         
+        foreignKeyPattern = re.compile(r"FOREIGN KEY \(([a-z_]\w*)\)", re.IGNORECASE)
+        
         # check that all names are valid
-        for name, table in self.tables.items():
-            self._assert_safe_name(name)
+        for table_name, table in self.tables.items():
+            self._assert_safe_name(table_name)
             for key, data_type in table:
+                # support FOREIGN KEYs
+                match = foreignKeyPattern.match(key)
+                if match:
+                    key = match.group(1)
+                    self._assert_key_in_table(table_name, key)
+                
                 self._assert_safe_name(key)
         
     def _assert_safe_name(self, name):
@@ -169,7 +189,10 @@ class Database:
             for k in set(get_list):
                 self._assert_key_in_table(table_name, k)
         else:
-            get_list = [x[0] for x in self.tables[table_name]]
+            get_list = []
+            for x in self.tables[table_name]:
+                if not x[0].startswith("FOREIGN KEY"):
+                    get_list.append(x[0])
             
         # make a list of things to match, and their match type (>, =, etc.)
         params = []
@@ -281,15 +304,17 @@ def test():
     # map of every table and column in database
     tables_map = {
         "testTable1": [
-            ("t1_w",    "TEXT UNIQUE PRIMARY KEY"),
-            ("t1_x",    "TEXT"),
-            ("t1_y",    "INTEGER"),
-            ("t1_z",    "TIMESTAMP")
+            ("w",    "TEXT UNIQUE PRIMARY KEY"),
+            ("x",    "TEXT"),
+            ("y",    "INTEGER"),
+            ("z",    "TIMESTAMP"),
+            ("f",    "INTEGER"),
+            ("FOREIGN KEY (f)", "REFERENCES test_table_2(x)"),
         ],
         "test_table_2": [
-            ("t1_x",    "INTEGER PRIMARY KEY AUTOINCREMENT"),
-            ("t1_y",    "TEXT"),
-            ("t1_z",    "INTEGER"),
+            ("x",    "INTEGER PRIMARY KEY AUTOINCREMENT"),
+            ("y",    "TEXT"),
+            ("z",    "INTEGER"),
         ]
     }
     
@@ -302,16 +327,16 @@ def test():
     # demo insert into table
     db.put(
         "testTable1",
-        {"t1_y": 99, "t1_z": datetime.now()}, # unique identifiers (all must match)
-        {"t1_w": "One primary key here"}      # new data to insert
+        {"y": 99, "z": datetime.now()}, # unique identifiers (all must match)
+        {"w": "One primary key here"}      # new data to insert
     )
 
     # demo insert into table
     print("Insert into table...")
     lastrowid = db.put(
         "testTable1",
-        {"t1_w": "I'm Unique"},             # unique identifiers (all must match)
-        {"t1_y": 5, "t1_z": datetime.now()} # new data to insert
+        {"w": "I'm Unique"},             # unique identifiers (all must match)
+        {"y": 5, "z": datetime.now()} # new data to insert
     )
     print("inserted row ID was", lastrowid)
     
@@ -319,8 +344,8 @@ def test():
     print("Update row in table...")
     lastrowid = db.put(
         "testTable1",
-        {"t1_w": "I'm Unique", "t1_y": 5},  # unique identifiers (all must match)
-        {"t1_y": 99, "t1_x": "RandomText"}  # new data to insert
+        {"w": "I'm Unique", "y": 5},  # unique identifiers (all must match)
+        {"y": 99, "x": "RandomText"}  # new data to insert
     )
     print("updated row ID was", lastrowid)
     
@@ -328,7 +353,7 @@ def test():
     print("Get all matches:")
     pprint(db.get_all(
         "testTable1",
-        {"t1_y": 99},
+        {"y": 99},
         # get all columns by default
     ))
     
@@ -336,15 +361,15 @@ def test():
     print("Get first match:")
     pprint(db.get(
         "testTable1",
-        {"t1_y": 99},
-        ["t1_w", "t1_z"] # only get these columns
+        {"y": 99},
+        ["w", "z"] # only get these columns
     ))
     
     # demo delete all rows that match
     print("Delete matches...",)
     rows_deleted = db.delete(
         "testTable1",
-        {"t1_y": 99}
+        {"y": 99}
     )
     print("deleted {} rows.".format(rows_deleted))
     
