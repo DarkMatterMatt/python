@@ -20,10 +20,11 @@
 ##    2.2.0 - A: Sorting support                                            ##
 ##            A: Decent documentation (in the form of Docstrings & comments)##
 ##            A: Alias functions upsert=put, insert=post                    ##
+##    2.3.0 - A: create|delete|reset_all_tables functions                   ##
 ##                                                                          ##
 ##        Usage: (See test() for examples. see Docstrings for more detail.) ##
-##             > import sqlite3_wrapper                                     ##
-##             > db = sqlite3_wrapper.Database("name.db", db_structure)     ##
+##             > import sqlite3_wrapper as sql                              ##
+##             > db = sql.Database("name.db", database_structure)           ##
 ##             > db.put(table, selection_dictionary, dictionary_to_put)     ##
 ##                  returns the rowid updated                               ##
 ##             > db.upsert - alias for put                                  ##
@@ -40,7 +41,7 @@
 import sqlite3
 import re
 
-__version__ = "2.2.0"
+__version__ = "2.3.0"
 _DEBUG = False
 
 EQ                 = "="
@@ -180,18 +181,33 @@ class Database:
         params = ', '.join(" ".join(x) for x in self.tables[table_name])
         if _DEBUG: print("@SQL CREATE TABLE IF NOT EXISTS {} ({})".format(table_name, params))
         self.c.execute("CREATE TABLE IF NOT EXISTS {} ({})".format(table_name, params))
+        
+    def create_all_tables(self):
+        """Create all the tables in the database structure."""
+        for table_name in self.tables:
+            self.create_table(table_name)
 
     def delete_table(self, table_name):
         """Delete the table if it exists."""
         self._assert_table_in_database_structure(table_name)
         if _DEBUG: print("@SQL DROP TABLE IF EXISTS {}".format(table_name))
         self.c.execute("DROP TABLE IF EXISTS {}".format(table_name))
+        
+    def delete_all_tables(self):
+        """Delete all the tables in the database structure."""
+        for table_name in self.tables:
+            self.delete_table(table_name)
 
     def reset_table(self, table_name):
         """Remove every row from the table."""
         self._assert_table_in_database_structure(table_name)
         if _DEBUG: print("@SQL DELETE FROM {}".format(table_name))
         self.c.execute("DELETE FROM {}".format(table_name))
+        
+    def reset_all_tables(self):
+        """Reset all the tables in the database structure."""
+        for table_name in self.tables:
+            self.reset_table(table_name)
 
     def table_exists(self, table_name):
         """Determine whether the table exists."""
