@@ -133,7 +133,7 @@ class Database:
         for k, data_type in self.tables[table_name]:
             if k.lower() == key:
                 return
-        raise KeyNotInTable("Key '{}' is not in the table (is missing from {} in the database structure).".format(key, table_name))
+        raise KeyNotInTable("Key '{}' is not in the table (is missing from '{}' in the database structure).".format(key, table_name))
 
     def _process_select_dict(self, table_name, select_dict_orig):
         """Check that all key:values are valid and have a comparison type."""
